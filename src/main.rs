@@ -129,9 +129,18 @@ async fn extract_information(info_page: &mut Element) -> HashMap<String, Informa
         let label = span.text().await.unwrap();
         let mut value = row.find(Locator::Css(".controls-content")).await.unwrap();
         let value_id = value.attr("id").await.unwrap().unwrap();
-        let value = match value.find(Locator::Css("span")).await {
-            Ok(mut e) => e.text().await.unwrap(),
-            _ => "".to_owned(),
+        let value = match value.find_all(Locator::Css("span")).await {
+            Ok(elements) => {
+                let mut contents = Vec::with_capacity(elements.len());
+                for mut el in elements {
+                    contents.push(el.html(true).await.unwrap());
+                }
+                contents.join("")
+            }
+            Err(e) => {
+                warn!("Unable to extract value: {:#}", e);
+                "".to_owned()
+            }
         };
 
         let row_info = Information {
