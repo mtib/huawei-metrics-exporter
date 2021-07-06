@@ -63,6 +63,7 @@ It currently outputs JSON which can be piped into a file and then uploaded to a 
 
 This exporter uses the following environemt variables:
 
+- `CHROME_BINARY`: Absolute path to chrome(ium) binary to use.
 - `CHROMEDRIVER_PORT`: Port at which [chromedriver][chromedriver] is running locally.
 - `HUAWEI_ROUTER_HOST`: IP or hostname at which HUAWEI router web interface can be found.
 - `HUAWEI_ROUTER_PASS`: Password for login on HUAWEI router web interface.

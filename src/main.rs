@@ -5,6 +5,7 @@ use std::{collections::HashMap, env, time::Duration};
 use dotenv::dotenv;
 use fantoccini::{elements::Element, ClientBuilder, Locator};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 use tokio::time::sleep;
 
 #[macro_use]
@@ -39,7 +40,22 @@ async fn main() {
 
     debug!("Connecting to webdriver");
 
+    let mut capabilities = Map::new();
+    let mut chrome_options = Map::new();
+
+    chrome_options.insert("args".to_string(), json!(["--headless"]));
+
+    if let Ok(bin) = std::env::var("CHROME_BINARY") {
+        chrome_options.insert("binary".to_string(), json!(bin));
+    }
+
+    capabilities.insert(
+        "goog:chromeOptions".to_string(),
+        Value::Object(chrome_options),
+    );
+
     let mut c = ClientBuilder::native()
+        .capabilities(capabilities)
         .connect(&format!("http://localhost:{}", port))
         .await
         .expect("failed to connect to WebDriver");
