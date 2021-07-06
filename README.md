@@ -73,3 +73,17 @@ This exporter uses the following environemt variables:
 At `.env` in PWD.
 
 [chromedriver]: https://chromedriver.chromium.org/
+
+## Example usage
+
+### Uploading to HASS webhook trigger
+
+```sh
+#!/bin/bash
+
+ENDPOINT=some_enpoint_id
+TMPFILE=".huawei.json"
+CHROMEDRIVER_PORT=9515 HUAWEI_ROUTER_PASS=Lamppenkey1 huawei-metrics > $TMPFILE
+data=$(cat $TMPFILE)
+curl -X POST -H "Content-Type: application/json" --data"$data\n" https://hass.local/api/webhook/$ENDPOINT
+```
