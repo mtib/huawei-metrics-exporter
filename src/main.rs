@@ -112,6 +112,7 @@ struct Information {
     label: String,
     value_id: String,
     value: String,
+    hidden: bool,
 }
 
 async fn extract_information(info_page: &mut Element) -> HashMap<String, Information> {
@@ -122,6 +123,12 @@ async fn extract_information(info_page: &mut Element) -> HashMap<String, Informa
     let rows = table.find_all(Locator::Css(".clearboth")).await.unwrap();
     for mut row in rows.into_iter() {
         trace!("{:?}", row.html(false).await);
+        let hidden = row
+            .attr("style")
+            .await
+            .unwrap()
+            .map(|v| v.contains("display: none;"))
+            .unwrap_or(false);
 
         let mut label = row.find(Locator::Css(".control-label")).await.unwrap();
         let mut span = label.find(Locator::Css("span")).await.unwrap();
@@ -148,6 +155,7 @@ async fn extract_information(info_page: &mut Element) -> HashMap<String, Informa
             label,
             value_id,
             value,
+            hidden,
         };
         trace!("Adding row: {:?}", row_info);
         info.insert(label_id.split_once(".").unwrap().1.to_owned(), row_info);
