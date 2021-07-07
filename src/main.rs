@@ -1,6 +1,11 @@
 #![feature(async_closure)]
 
-use std::{collections::HashMap, env, time::Duration};
+use std::{
+    collections::HashMap,
+    env,
+    process::{Command, Stdio},
+    time::Duration,
+};
 
 use clap::{App, Arg};
 use dotenv::dotenv;
@@ -35,7 +40,13 @@ async fn main() {
                 .short("f")
                 .takes_value(true)
                 .default_value("json")
+                .help("Output format to print on stdout")
                 .possible_values(&["json", "prometheus"]),
+        )
+        .arg(
+            Arg::with_name("chromedriver")
+                .short("-c")
+                .help("Starts and kills own chromedriver instance"),
         )
         .get_matches();
 
@@ -53,7 +64,23 @@ async fn main() {
         }
     };
 
-    info!("Using chromedriver at port {}", port);
+    let start_own_cd = matches.is_present("chromedriver");
+    let chromedriver = if start_own_cd {
+        info!("Starting own chromedriver on port {}", port);
+        let cd = Some(
+            Command::new("chromedriver")
+                .arg(format!("--port={}", port))
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        trace!("Sleeping 2s to let chromedriver initialize itself");
+        sleep(Duration::from_millis(2000)).await;
+        cd
+    } else {
+        info!("Using chromedriver at port {}", port);
+        None
+    };
 
     let router_host =
         env::var(ENV_HUAWEI_ROUTER_HOST).unwrap_or_else(|_| DEFAULT_HUAWEI_ROUTER_HOST.to_owned());
@@ -185,6 +212,11 @@ async fn main() {
     debug!("Closing window");
     c.close_window().await.unwrap();
     c.close().await.unwrap();
+
+    if let Some(mut c) = chromedriver {
+        info!("Killing own chromedriver");
+        c.kill().ok();
+    };
 }
 
 /*
