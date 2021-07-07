@@ -93,6 +93,10 @@ huawei_metrics_totaldownload_mb 3777746.68
 huawei_metrics_totalupload_mb 183395.66
 ```
 
+## Installation
+
+`cargo install --git https://github.com/mtib/huawei-metrics-exporter`
+
 ## Environemnt Variables
 
 This exporter uses the following environemt variables:
@@ -102,7 +106,7 @@ This exporter uses the following environemt variables:
 - `HUAWEI_ROUTER_HOST`: IP or hostname at which HUAWEI router web interface can be found.
 - `HUAWEI_ROUTER_PASS`: Password for login on HUAWEI router web interface.
 
-## Dotfile
+### Dotfile
 
 At `.env` in PWD.
 
@@ -117,7 +121,7 @@ ENDPOINT=some_enpoint_id
 TMPFILE=".huawei.json"
 CHROMEDRIVER_PORT=9515 HUAWEI_ROUTER_PASS=your-very-secure-password huawei-metrics > $TMPFILE
 data=$(cat $TMPFILE)
-curl -X POST -H "Content-Type: application/json" --data "$data\n" https://hass.local/api/webhook/$ENDPOINT
+curl -X POST -H "Content-Type: application/json" --data "$data" https://hass.local/api/webhook/$ENDPOINT
 ```
 
 ```yaml
@@ -136,6 +140,18 @@ template:
       - name: '{{ trigger.json.INI.label }}'
         state: '{{ trigger.json.INI.value }}'
         unique_id: ini
+```
+
+### Pushing to Prometheus Pushgateway
+
+```sh
+#!/bin/bash
+
+source $HOME/.cargo/env
+
+TMPFILE=".huawei.metrics"
+CHROMEDRIVER_PORT=9515 HUAWEI_ROUTER_PASS=your-very-secret-password huawei-metrics -f prometheus > $TMPFILE
+curl -X POST -H  "Content-Type: text/plain" --data-binary "@$TMPFILE" https://pushgateway.example.com/metrics/job/huawei_metrics/instance/some_instance_id
 ```
 
 ## Troubleshooting
