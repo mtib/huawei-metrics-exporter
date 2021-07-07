@@ -1,12 +1,11 @@
 #![feature(async_closure)]
 
-use std::{collections::HashMap, env, time::Duration};
+use std::{collections::HashMap, env};
 
 use dotenv::dotenv;
 use fantoccini::{elements::Element, ClientBuilder, Locator};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use tokio::time::sleep;
 
 #[macro_use]
 extern crate log;
