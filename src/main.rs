@@ -240,6 +240,7 @@ async fn main() {
     debug!("Closing window");
     c.close_window().await.unwrap();
     c.close().await.unwrap();
+    drop(c);
 
     if let Some(mut c) = chromedriver {
         info!("Killing own chromedriver");
