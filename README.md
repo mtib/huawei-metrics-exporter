@@ -6,55 +6,58 @@ It currently outputs JSON which can be piped into a file and then uploaded to a 
 
 ```json
 {
-  "rsrp": {
-    "label_id": "deviceinformation.rsrp",
-    "label": "RSRP",
-    "value_id": "di-rsrp",
-    "value": "-109dBm",
-    "hidden": false
-  },
-  "rsrq": {
-    "label_id": "deviceinformation.rsrq",
-    "label": "RSRQ",
-    "value_id": "di-rsrq",
-    "value": "-10.0dB",
+  "INI": {
+    "label_id": "deviceinformation.INI",
+    "label": "Configuration file version",
+    "value_id": "di-iniversion",
+    "value": "B535-232-CUST 10.0.1.1(C26)",
+    "parsed": null,
     "hidden": false
   },
   "sinr": {
     "label_id": "deviceinformation.sinr",
     "label": "SINR",
     "value_id": "di-sinr",
-    "value": "2dB",
+    "value": "-1dB",
+    "parsed": {
+      "value": -1,
+      "unit": "dB"
+    },
     "hidden": false
   },
-  "txPower": {
-    "label_id": "deviceinformation.txPower",
-    "label": "Wireless transmit power",
-    "value_id": "di-txpower",
-    "value": "PPusch:13dBm PPucch:4dBm PSrs:19dBm PPrach:17dBm",
-    "hidden": false
-  },
-  "totalupload": {
-    "label_id": "deviceinformation.totalupload",
-    "label": "",
-    "value_id": "deviceinformation_totalupload",
-    "value": "182944.35MB",
+  "currentdownloadrate": {
+    "label_id": "deviceinformation.currentdownloadrate",
+    "label": "Download rate",
+    "value_id": "deviceinformation_currentdownloadrate",
+    "value": "4.41Kbps",
+    "parsed": {
+      "value": 0.004306640625,
+      "unit": "Mbps"
+    },
     "hidden": true
   },
   "totaldownload": {
     "label_id": "deviceinformation.totaldownload",
-    "label": "",
+    "label": "Total download traffic",
     "value_id": "deviceinformation_totaldownload",
-    "value": "3764530.85MB",
+    "value": "3767677.91MB",
+    "parsed": {
+      "value": 3767677.91,
+      "unit": "MB"
+    },
     "hidden": true
   },
-  "currentdownloadrate": {
-    "label_id": "deviceinformation.currentdownloadrate",
-    "label": "",
-    "value_id": "deviceinformation_currentdownloadrate",
-    "value": "14.93Mbps",
-    "hidden": true
-  },
+  "rsrp": {
+    "label_id": "deviceinformation.rsrp",
+    "label": "RSRP",
+    "value_id": "di-rsrp",
+    "value": "-109dBm",
+    "parsed": {
+      "value": -109,
+      "unit": "dBm"
+    },
+    "hidden": false
+  }
   // ...
 }
 ```

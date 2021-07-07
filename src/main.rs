@@ -131,7 +131,14 @@ struct Information {
     label: String,
     value_id: String,
     value: String,
+    parsed: Option<Parsed>,
     hidden: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Parsed {
+    value: f64,
+    unit: String,
 }
 
 async fn extract_information(info_page: &mut Element) -> HashMap<String, Information> {
@@ -169,16 +176,49 @@ async fn extract_information(info_page: &mut Element) -> HashMap<String, Informa
             }
         };
 
+        let parsed = {
+            let mut parsed = None;
+            for unit in ["dB", "dBm", "GB", "MB", "KB", "Gbps", "Mbps", "Kbps", "B"] {
+                parsed = try_parse(&value, unit);
+                if parsed.is_some() {
+                    break;
+                }
+            }
+            if let Some(Parsed { value, unit }) = parsed.clone() {
+                if unit == "Kbps" {
+                    parsed = Some(Parsed {
+                        value: value / 1024f64,
+                        unit: "Mbps".to_string(),
+                    });
+                }
+            }
+            parsed
+        };
+
         let row_info = Information {
             label_id: label_id.clone(),
             label,
             value_id,
             value,
             hidden,
+            parsed,
         };
         trace!("Adding row: {:?}", row_info);
         info.insert(label_id.split_once(".").unwrap().1.to_owned(), row_info);
     }
 
     info
+}
+
+fn try_parse(value: impl AsRef<str>, unit: impl AsRef<str>) -> Option<Parsed> {
+    let value = value.as_ref();
+    let unit = unit.as_ref();
+    if value.ends_with(unit) {
+        Some(Parsed {
+            value: value[0..(value.len() - unit.len())].parse().ok()?,
+            unit: unit.to_string(),
+        })
+    } else {
+        None
+    }
 }
