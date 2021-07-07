@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    env,
+    env, fs,
     process::{Command, Stdio},
     time::Duration,
 };
@@ -27,6 +27,7 @@ const ENV_DEVICE_PASSWORD: &str = "HUAWEI_ROUTER_PASS";
 enum OutputFormats {
     Json,
     Prometheus,
+    Silent,
 }
 
 #[tokio::main]
@@ -41,18 +42,31 @@ async fn main() {
                 .takes_value(true)
                 .default_value("json")
                 .help("Output format to print on stdout")
-                .possible_values(&["json", "prometheus"]),
+                .possible_values(&["json", "prometheus", "silent"]),
         )
         .arg(
             Arg::with_name("chromedriver")
-                .short("-c")
+                .short("c")
                 .help("Starts and kills own chromedriver instance"),
+        )
+        .arg(
+            Arg::with_name("prometheus-out")
+                .long("po")
+                .help("File to write prometheus metrics to in addition to the stdout output")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("json-out")
+                .long("jo")
+                .help("File to write json metrics to in addition to the stdout output")
+                .takes_value(true),
         )
         .get_matches();
 
     let format = match matches.value_of("format").unwrap() {
         "json" => OutputFormats::Json,
         "prometheus" => OutputFormats::Prometheus,
+        "silent" => OutputFormats::Silent,
         _ => unreachable!(),
     };
 
@@ -160,52 +174,66 @@ async fn main() {
         extract_information(&mut c.find(Locator::Id("deviceinformation_page")).await.unwrap())
             .await;
 
-    match format {
-        OutputFormats::Json => println!("{}", serde_json::to_string_pretty(&info).unwrap()),
-        OutputFormats::Prometheus => {
-            let r = Registry::new();
-
-            for (label, value) in &info {
-                if let Some(Parsed {
-                    value: numeric_value,
-                    unit,
-                }) = &value.parsed
-                {
-                    let opts = Opts::new(
-                        format!(
-                            "{}_{}",
-                            label.to_ascii_lowercase(),
-                            unit.to_ascii_lowercase()
-                        ),
-                        value.label.clone(),
-                    );
-                    let opts = opts.namespace("huawei_metrics");
-                    match unit.as_str() {
-                        "Mbps" | "Kbps" | "Bps" | "dBm" | "dB" => {
-                            let gauge = Gauge::with_opts(opts).unwrap();
-                            gauge.set(*numeric_value);
-                            r.register(Box::new(gauge)).unwrap();
-                        }
-                        "MB" | "GB" | "KB" | "B" => {
-                            let counter = Counter::with_opts(opts).unwrap();
-                            counter.inc_by(*numeric_value);
-                            r.register(Box::new(counter)).unwrap();
-                        }
-                        _ => {
-                            warn!(
-                                "Skipping {:?} because of unknown unit to metric conversion",
-                                info
-                            );
-                        }
+    let json_out = serde_json::to_string_pretty(&info).unwrap();
+    let prometheus_out = {
+        let r = Registry::new();
+        for (label, value) in &info {
+            if let Some(Parsed {
+                value: numeric_value,
+                unit,
+            }) = &value.parsed
+            {
+                let opts = Opts::new(
+                    format!(
+                        "{}_{}",
+                        label.to_ascii_lowercase(),
+                        unit.to_ascii_lowercase()
+                    ),
+                    value.label.clone(),
+                );
+                let opts = opts.namespace("huawei_metrics");
+                match unit.as_str() {
+                    "Mbps" | "Kbps" | "Bps" | "dBm" | "dB" => {
+                        let gauge = Gauge::with_opts(opts).unwrap();
+                        gauge.set(*numeric_value);
+                        r.register(Box::new(gauge)).unwrap();
+                    }
+                    "MB" | "GB" | "KB" | "B" => {
+                        let counter = Counter::with_opts(opts).unwrap();
+                        counter.inc_by(*numeric_value);
+                        r.register(Box::new(counter)).unwrap();
+                    }
+                    _ => {
+                        warn!(
+                            "Skipping {:?} because of unknown unit to metric conversion",
+                            info
+                        );
                     }
                 }
             }
+        }
 
-            let mut buffer = vec![];
-            let encoder = TextEncoder::new();
-            let metric_families = r.gather();
-            encoder.encode(&metric_families, &mut buffer).unwrap();
-            println!("{}", String::from_utf8(buffer).unwrap());
+        let mut buffer = vec![];
+        let encoder = TextEncoder::new();
+        let metric_families = r.gather();
+        encoder.encode(&metric_families, &mut buffer).unwrap();
+        String::from_utf8(buffer).unwrap()
+    };
+
+    match format {
+        OutputFormats::Json => {
+            println!("{}", json_out);
+        }
+        OutputFormats::Prometheus => {
+            println!("{}", prometheus_out);
+        }
+        _ => {}
+    }
+
+    for (option, content) in [("prometheus-out", prometheus_out), ("json-out", json_out)] {
+        if let Some(filepath) = matches.value_of(option) {
+            trace!("Outputting {} to {}", option, filepath);
+            fs::write(filepath, content).unwrap();
         }
     }
 
