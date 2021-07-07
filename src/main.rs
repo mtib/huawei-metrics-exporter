@@ -1,11 +1,14 @@
 #![feature(async_closure)]
 
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, time::Duration};
 
+use clap::{App, Arg};
 use dotenv::dotenv;
 use fantoccini::{elements::Element, ClientBuilder, Locator};
+use prometheus::{Counter, Encoder, Gauge, Opts, Registry, TextEncoder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use tokio::time::sleep;
 
 #[macro_use]
 extern crate log;
@@ -16,10 +19,31 @@ const ENV_HUAWEI_ROUTER_HOST: &str = "HUAWEI_ROUTER_HOST";
 const DEFAULT_HUAWEI_ROUTER_HOST: &str = "192.168.8.1";
 const ENV_DEVICE_PASSWORD: &str = "HUAWEI_ROUTER_PASS";
 
+enum OutputFormats {
+    Json,
+    Prometheus,
+}
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
     dotenv().ok();
+
+    let matches = App::new("huawei-metrics")
+        .arg(
+            Arg::with_name("format")
+                .short("f")
+                .takes_value(true)
+                .default_value("json")
+                .possible_values(&["json", "prometheus"]),
+        )
+        .get_matches();
+
+    let format = match matches.value_of("format").unwrap() {
+        "json" => OutputFormats::Json,
+        "prometheus" => OutputFormats::Prometheus,
+        _ => unreachable!(),
+    };
 
     let port: u16 = {
         let v = env::var(ENV_CHOMEDRIVER_PORT);
@@ -102,11 +126,61 @@ async fn main() {
         .unwrap();
 
     info!("Successfully navigated to device information page");
+    debug!("Sleeping 2s to ensure all data has loaded");
+    sleep(Duration::from_millis(2000)).await;
 
     let info =
         extract_information(&mut c.find(Locator::Id("deviceinformation_page")).await.unwrap())
             .await;
-    println!("{}", serde_json::to_string_pretty(&info).unwrap());
+
+    match format {
+        OutputFormats::Json => println!("{}", serde_json::to_string_pretty(&info).unwrap()),
+        OutputFormats::Prometheus => {
+            let r = Registry::new();
+
+            for (label, value) in &info {
+                if let Some(Parsed {
+                    value: numeric_value,
+                    unit,
+                }) = &value.parsed
+                {
+                    let opts = Opts::new(
+                        format!(
+                            "{}_{}",
+                            label.to_ascii_lowercase(),
+                            unit.to_ascii_lowercase()
+                        ),
+                        value.label.clone(),
+                    );
+                    let opts = opts.namespace("huawei_metrics");
+                    match unit.as_str() {
+                        "Mbps" | "Kbps" | "Bps" | "dBm" | "dB" => {
+                            let gauge = Gauge::with_opts(opts).unwrap();
+                            gauge.set(*numeric_value);
+                            r.register(Box::new(gauge)).unwrap();
+                        }
+                        "MB" | "GB" | "KB" | "B" => {
+                            let counter = Counter::with_opts(opts).unwrap();
+                            counter.inc_by(*numeric_value);
+                            r.register(Box::new(counter)).unwrap();
+                        }
+                        _ => {
+                            warn!(
+                                "Skipping {:?} because of unknown unit to metric conversion",
+                                info
+                            );
+                        }
+                    }
+                }
+            }
+
+            let mut buffer = vec![];
+            let encoder = TextEncoder::new();
+            let metric_families = r.gather();
+            encoder.encode(&metric_families, &mut buffer).unwrap();
+            println!("{}", String::from_utf8(buffer).unwrap());
+        }
+    }
 
     debug!("Closing window");
     c.close_window().await.unwrap();

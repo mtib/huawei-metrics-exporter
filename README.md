@@ -2,7 +2,9 @@
 
 A single binary which scrapes the HUAWEI router web interface for all device information. Can be used as metrics for connection strenth and speed as well as data usage. It includes information which are hidden on the web interface.
 
-It currently outputs JSON which can be piped into a file and then uploaded to a service like homeassistant or archived and analyzed manually. I am planning to implement an OpenMetrics output format at some point for use with prometheus.
+![](docs/hass_example.png)
+
+It currently outputs JSON and OpenMetrics which can be piped into a file and then uploaded to a service like homeassistant and prometheus or archived and analyzed manually.
 
 ```json
 {
@@ -62,6 +64,35 @@ It currently outputs JSON which can be piped into a file and then uploaded to a 
 }
 ```
 
+Currently only numeric device information with a known unit are included in the prometheus output format `huawei-metrics -f prometheus`:
+
+```
+# HELP huawei_metrics_currentdownloadrate_mbps Download rate
+# TYPE huawei_metrics_currentdownloadrate_mbps gauge
+huawei_metrics_currentdownloadrate_mbps 0.028642578125
+# HELP huawei_metrics_currentuploadrate_mbps Upload rate
+# TYPE huawei_metrics_currentuploadrate_mbps gauge
+huawei_metrics_currentuploadrate_mbps 0.007880859375
+# HELP huawei_metrics_rsrp_dbm RSRP
+# TYPE huawei_metrics_rsrp_dbm gauge
+huawei_metrics_rsrp_dbm -110
+# HELP huawei_metrics_rsrq_db RSRQ
+# TYPE huawei_metrics_rsrq_db gauge
+huawei_metrics_rsrq_db -10
+# HELP huawei_metrics_rssi_dbm RSSI
+# TYPE huawei_metrics_rssi_dbm gauge
+huawei_metrics_rssi_dbm -81
+# HELP huawei_metrics_sinr_db SINR
+# TYPE huawei_metrics_sinr_db gauge
+huawei_metrics_sinr_db 2
+# HELP huawei_metrics_totaldownload_mb Total download traffic
+# TYPE huawei_metrics_totaldownload_mb counter
+huawei_metrics_totaldownload_mb 3777746.68
+# HELP huawei_metrics_totalupload_mb Total upload traffic
+# TYPE huawei_metrics_totalupload_mb counter
+huawei_metrics_totalupload_mb 183395.66
+```
+
 ## Environemnt Variables
 
 This exporter uses the following environemt variables:
@@ -106,5 +137,9 @@ template:
         state: '{{ trigger.json.INI.value }}'
         unique_id: ini
 ```
+
+## Troubleshooting
+
+`pretty_env_logger` is included and can be enabled with `RUST_FMT="huawei_metrics=trace" huawei-metrics`.
 
 [chromedriver]: https://chromedriver.chromium.org/
