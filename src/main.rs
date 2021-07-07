@@ -22,10 +22,13 @@ async fn main() {
     pretty_env_logger::init();
     dotenv().ok();
 
-    let port: u16 = env::var(ENV_CHOMEDRIVER_PORT)
-        .map(|ref r| str::parse(r))
-        .expect("Chromedriver port env set but failed to parse")
-        .unwrap_or(DEFAULT_CHROMEDRIVER_PORT);
+    let port: u16 = {
+        let v = env::var(ENV_CHOMEDRIVER_PORT);
+        match v {
+            Ok(s) => str::parse(&s).expect("Chromedriver port specified but unable to parse"),
+            Err(_) => DEFAULT_CHROMEDRIVER_PORT,
+        }
+    };
 
     info!("Using chromedriver at port {}", port);
 
@@ -149,7 +152,7 @@ async fn extract_information(info_page: &mut Element) -> HashMap<String, Informa
         let mut label = row.find(Locator::Css(".control-label")).await.unwrap();
         let mut span = label.find(Locator::Css("span")).await.unwrap();
         let label_id = span.attr("lang-id").await.unwrap().unwrap();
-        let label = span.text().await.unwrap();
+        let label = span.html(true).await.unwrap();
         let mut value = row.find(Locator::Css(".controls-content")).await.unwrap();
         let value_id = value.attr("id").await.unwrap().unwrap();
         let value = match value.find_all(Locator::Css("span")).await {

@@ -85,5 +85,38 @@ ENDPOINT=some_enpoint_id
 TMPFILE=".huawei.json"
 CHROMEDRIVER_PORT=9515 HUAWEI_ROUTER_PASS=Lamppenkey1 huawei-metrics > $TMPFILE
 data=$(cat $TMPFILE)
-curl -X POST -H "Content-Type: application/json" --data"$data\n" https://hass.local/api/webhook/$ENDPOINT
+curl -X POST -H "Content-Type: application/json" --data "$data\n" https://hass.local/api/webhook/$ENDPOINT
+```
+
+```yaml
+template:
+  - trigger:
+    - platform: webhook
+      webhook_id: "some_endpoint_id"
+    sensor:
+      - name: '{{ trigger.json.sinr.label }}'
+        state: '{{ trigger.json.sinr.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.sinr.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.rsrq.label }}'
+        state: '{{ trigger.json.rsrq.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.rsrq.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.rssi.label }}'
+        state: '{{ trigger.json.rssi.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.rssi.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.serialNumber.label }}'
+        state: '{{ trigger.json.serialNumber.value }}'
+      - name: '{{ trigger.json.INI.label }}'
+        state: '{{ trigger.json.INI.value }}'
+      - name: '{{ trigger.json.totaldownload.label }}'
+        state: '{{ trigger.json.totaldownload.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.totaldownload.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.totalupload.label }}'
+        state: '{{ trigger.json.totalupload.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.totalupload.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.currentdownloadrate.label }}'
+        state: '{{ trigger.json.currentdownloadrate.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.currentdownloadrate.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
+      - name: '{{ trigger.json.currentuploadrate.label }}'
+        state: '{{ trigger.json.currentuploadrate.value | regex_replace(find="[a-z]", replace="", ignorecase=True) | float }}'
+        unit_of_measurement: '{{ trigger.json.currentuploadrate.value | regex_replace(find="\d+\.\d+", replace="", ignorecase=True) }}'
 ```
