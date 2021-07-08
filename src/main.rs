@@ -10,9 +10,10 @@ use std::{
 use clap::{App, Arg};
 use dotenv::dotenv;
 use fantoccini::{elements::Element, ClientBuilder, Locator};
-use prometheus::{Counter, Encoder, Gauge, Opts, Registry, TextEncoder};
+use prometheus::{Counter, Encoder, Gauge, IntGauge, Opts, Registry, TextEncoder};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, to_value, Map, Value};
 use tokio::time::sleep;
 
 #[macro_use]
@@ -174,24 +175,108 @@ async fn main() {
         extract_information(&mut c.find(Locator::Id("deviceinformation_page")).await.unwrap())
             .await;
 
-    let json_out = serde_json::to_string_pretty(&info).unwrap();
+    debug!("Navigating to device management page");
+    c.goto(&format!(
+        "http://{}/html/content.html#devicemanagement",
+        router_host
+    ))
+    .await
+    .unwrap();
+
+    debug!("Sleeping 4s to allow device management page to load");
+    sleep(Duration::from_millis(4000)).await;
+
+    let mut info_map = Map::new();
+
+    let devices =
+        extract_devices(&mut c.find(Locator::Id("devicemanagement_page")).await.unwrap()).await;
+
+    info_map.insert("devices".to_string(), to_value(&devices).unwrap());
+    for (k, v) in &info {
+        let old_data = info_map.insert(k.to_owned(), to_value(v).unwrap());
+        if old_data.is_some() {
+            error!(
+                "Somehow overwrote data when copying one map to another: {}",
+                k
+            );
+        }
+    }
+
+    let json_out = serde_json::to_string_pretty(&info_map).unwrap();
+    let new_opt = |name: &str, help: &str| {
+        Opts::new(name.to_string(), help.to_string()).namespace("huawei_metrics")
+    };
     let prometheus_out = {
         let r = Registry::new();
+
+        for (name, help, num) in [
+            (
+                "online_devices",
+                "Number of online devices",
+                devices.online.len() as i64,
+            ),
+            (
+                "offline_devices",
+                "Number of offline devices",
+                devices.offline.len() as i64,
+            ),
+            (
+                "total_devices",
+                "Number of total devices",
+                (devices.offline.len() + devices.online.len()) as i64,
+            ),
+            (
+                "wifi_devices",
+                "Number of wifi devices",
+                devices
+                    .online
+                    .iter()
+                    .filter(|d| matches!(d.connection, Some(ConnectionType::Wifi(_))))
+                    .count() as i64,
+            ),
+            (
+                "wifi_2ghz_devices",
+                "Number of 2.4 GHz wifi devices",
+                devices
+                    .online
+                    .iter()
+                    .filter(|d| {
+                        matches!(d.connection, Some(ConnectionType::Wifi(Frequency::W2_4GHz)))
+                    })
+                    .count() as i64,
+            ),
+            (
+                "wifi_5ghz_devices",
+                "Number of 5 GHz wifi devices",
+                devices
+                    .online
+                    .iter()
+                    .filter(|d| {
+                        matches!(d.connection, Some(ConnectionType::Wifi(Frequency::W5GHz)))
+                    })
+                    .count() as i64,
+            ),
+        ] {
+            let opts = new_opt(name, help);
+            let gauge = IntGauge::with_opts(opts).unwrap();
+            gauge.set(num);
+            r.register(Box::new(gauge)).unwrap();
+        }
+
         for (label, value) in &info {
             if let Some(Parsed {
                 value: numeric_value,
                 unit,
             }) = &value.parsed
             {
-                let opts = Opts::new(
-                    format!(
+                let opts = new_opt(
+                    &format!(
                         "{}_{}",
                         label.to_ascii_lowercase(),
                         unit.to_ascii_lowercase()
                     ),
-                    value.label.clone(),
+                    &value.label.clone(),
                 );
-                let opts = opts.namespace("huawei_metrics");
                 match unit.as_str() {
                     "Mbps" | "Kbps" | "Bps" | "dBm" | "dB" => {
                         let gauge = Gauge::with_opts(opts).unwrap();
@@ -275,6 +360,225 @@ struct Parsed {
     unit: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct DeviceOverview {
+    online: Vec<Device>,
+    offline: Vec<Device>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Device {
+    connection: Option<ConnectionType>,
+    name: Option<String>,
+    ips: Option<Vec<String>>,
+    uptime: Option<MinuteCounter>,
+    leasetime: Option<MinuteCounter>,
+    mac: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+enum ConnectionType {
+    #[serde(rename = "wifi")]
+    Wifi(Frequency),
+    #[serde(rename = "other")]
+    Other(String),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+enum Frequency {
+    #[serde(rename = "2.4GHz")]
+    W2_4GHz,
+    #[serde(rename = "5GHz")]
+    W5GHz,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct MinuteCounter {
+    countdown: bool,
+    minutes: u64,
+}
+
+impl MinuteCounter {
+    fn try_from_str(text: impl AsRef<str>, countdown: bool) -> Option<Self> {
+        let re = Regex::new(r"(?P<day>\d+) day (?P<hour>\d+) hour (?P<minute>\d+) minute")
+            .expect("Regex compilation failed");
+        if let Some(cap) = re.captures(text.as_ref()) {
+            Some(MinuteCounter {
+                countdown,
+                minutes: cap.name("day")?.as_str().parse::<u64>().ok()? * 24 * 60
+                    + cap.name("hour")?.as_str().parse::<u64>().ok()? * 60
+                    + cap.name("minute")?.as_str().parse::<u64>().ok()?,
+            })
+        } else {
+            trace!("Not matching text: {}", text.as_ref());
+            None
+        }
+    }
+
+    #[allow(dead_code)]
+    fn interface_repr(&self) -> String {
+        format!(
+            "{} day {} hour {} minute",
+            self.minutes / (24 * 60),
+            (self.minutes % (24 * 60)) / 60,
+            self.minutes % (60)
+        )
+    }
+}
+
+async fn extract_device_data_row(data_row: &mut Element) -> Device {
+    let mac = data_row
+        .attr("mac")
+        .await
+        .unwrap()
+        .expect("Device listed without mac address");
+
+    let online = !data_row
+        .find(Locator::XPath("./div[1]"))
+        .await
+        .unwrap()
+        .attr("class")
+        .await
+        .unwrap()
+        .unwrap()
+        .contains("device_offline");
+
+    let name = {
+        data_row
+            .find(Locator::XPath("./div[2]/div[2]"))
+            .await
+            .unwrap()
+            .attr("name")
+            .await
+            .unwrap()
+    };
+
+    let connection = {
+        if online {
+            match data_row
+                .find(Locator::Css(".device_Interface_string"))
+                .await
+                .unwrap()
+                .html(true)
+                .await
+                .unwrap()
+                .as_str()
+            {
+                "5 GHz" => Some(ConnectionType::Wifi(Frequency::W5GHz)),
+                "2.4 GHz" => Some(ConnectionType::Wifi(Frequency::W2_4GHz)),
+                "" => None,
+                a => Some(ConnectionType::Other(a.to_owned())),
+            }
+        } else {
+            None
+        }
+    };
+
+    let ips = {
+        if online {
+            let mut ips = Vec::new();
+            for mut possible_ip_row in data_row
+                .find_all(Locator::Css(".dev-table-ip"))
+                .await
+                .unwrap()
+            {
+                if possible_ip_row
+                    .attr("class")
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(|| "hide".to_string())
+                    .contains("hide")
+                {
+                    continue;
+                }
+                let mut span = possible_ip_row
+                    .find(Locator::XPath("./span[last()]"))
+                    .await
+                    .unwrap();
+                ips.push(span.html(true).await.unwrap());
+            }
+            Some(ips)
+        } else {
+            None
+        }
+    };
+
+    let uptime = {
+        if online {
+            MinuteCounter::try_from_str(
+                data_row
+                    .find(Locator::Css(".dev-table-time"))
+                    .await
+                    .unwrap()
+                    .text()
+                    .await
+                    .unwrap(),
+                false,
+            )
+        } else {
+            None
+        }
+    };
+
+    let leasetime = {
+        if online {
+            if let Ok(mut el) = data_row.find(Locator::Css(".dev-table-time-down")).await {
+                MinuteCounter::try_from_str(el.text().await.unwrap(), true)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    let d = Device {
+        connection,
+        name,
+        ips,
+        mac,
+        uptime,
+        leasetime,
+    };
+    trace!("Found device: {:?}", d);
+    d
+}
+
+async fn extract_devices(devices_page: &mut Element) -> DeviceOverview {
+    let mut ov = DeviceOverview {
+        online: Vec::new(),
+        offline: Vec::new(),
+    };
+
+    let mut online_devices = devices_page
+        .find(Locator::Css("#online_device"))
+        .await
+        .unwrap();
+
+    for mut element in online_devices
+        .find_all(Locator::Css("#data_row"))
+        .await
+        .unwrap()
+    {
+        ov.online.push(extract_device_data_row(&mut element).await);
+    }
+
+    let mut offline_devices = devices_page
+        .find(Locator::Css("#offline_device"))
+        .await
+        .unwrap();
+
+    for mut element in offline_devices
+        .find_all(Locator::Css("#data_row"))
+        .await
+        .unwrap()
+    {
+        ov.offline.push(extract_device_data_row(&mut element).await);
+    }
+
+    ov
+}
+
 async fn extract_information(info_page: &mut Element) -> HashMap<String, Information> {
     let mut info = HashMap::new();
 
@@ -354,5 +658,48 @@ fn try_parse(value: impl AsRef<str>, unit: impl AsRef<str>) -> Option<Parsed> {
         })
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::MinuteCounter;
+
+    #[test]
+    fn minute_counter() {
+        let stable = [
+            "0 day 0 hour 0 minute",
+            "1 day 1 hour 1 minute",
+            "100 day 23 hour 59 minute",
+        ];
+
+        for example in stable {
+            assert_eq!(
+                example,
+                MinuteCounter::try_from_str(example, false)
+                    .expect("Failed to parse")
+                    .interface_repr()
+            );
+        }
+    }
+
+    #[test]
+    fn correcting_errors() {
+        let stable = [("1 day 25 hour 0 minute", 2 * 24 * 60 + 60)];
+
+        for example in stable {
+            assert_ne!(
+                example.0,
+                MinuteCounter::try_from_str(example.0, false)
+                    .expect("Failed to parse")
+                    .interface_repr()
+            );
+            assert_eq!(
+                MinuteCounter::try_from_str(example.0, false)
+                    .expect("Failed to parse")
+                    .minutes,
+                example.1
+            );
+        }
     }
 }

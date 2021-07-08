@@ -372,6 +372,7 @@ dependencies = [
  "log",
  "pretty_env_logger",
  "prometheus",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
