@@ -61,36 +61,108 @@ It currently outputs JSON and OpenMetrics which can be piped into a file and the
     "hidden": false
   }
   // ...
+  "devices": {
+    "offline": [
+      {
+        "connection": null,
+        "ips": null,
+        "leasetime": null,
+        "mac": "98:BB:1E:1C:30:2C",
+        "name": "Blade",
+        "uptime": null
+      },
+      {
+        "connection": null,
+        "ips": null,
+        "leasetime": null,
+        "mac": "A2:27:CD:81:EC:48",
+        "name": "A2:27:CD:81:EC:48",
+        "uptime": null
+      },
+      // ...
+    "online": [
+      {
+        "connection": {
+          "wifi": "5GHz"
+        },
+        "ips": [
+          "192.168.8.111"
+        ],
+        "leasetime": {
+          "countdown": true,
+          "minutes": 1277
+        },
+        "mac": "EC:C4:0D:34:D6:28",
+        "name": "Ida's Nintendo Switch",
+        "uptime": {
+          "countdown": false,
+          "minutes": 922
+        }
+      },
+      {
+        "connection": {
+          "wifi": "5GHz"
+        },
+        "ips": [
+          "192.168.8.161",
+          "fe80::1a56:80ff:fe7b:7721"
+        ],
+        "leasetime": {
+          "countdown": true,
+          "minutes": 1267
+        },
+        "mac": "18:56:80:7B:77:21",
+        "name": "Markus' Inspire",
+        "uptime": {
+          "countdown": false,
+          "minutes": 1612
+        }
+      },
+      // ...
+    }
+  }
 }
 ```
 
 Currently only numeric device information with a known unit are included in the prometheus output format `huawei-metrics -f prometheus`:
 
 ```
-# HELP huawei_metrics_currentdownloadrate_mbps Download rate
-# TYPE huawei_metrics_currentdownloadrate_mbps gauge
-huawei_metrics_currentdownloadrate_mbps 0.028642578125
-# HELP huawei_metrics_currentuploadrate_mbps Upload rate
-# TYPE huawei_metrics_currentuploadrate_mbps gauge
-huawei_metrics_currentuploadrate_mbps 0.007880859375
+# HELP huawei_metrics_offline_devices Number of offline devices
+# TYPE huawei_metrics_offline_devices gauge
+huawei_metrics_offline_devices 33
+# HELP huawei_metrics_online_devices Number of online devices
+# TYPE huawei_metrics_online_devices gauge
+huawei_metrics_online_devices 8
 # HELP huawei_metrics_rsrp_dbm RSRP
 # TYPE huawei_metrics_rsrp_dbm gauge
 huawei_metrics_rsrp_dbm -110
 # HELP huawei_metrics_rsrq_db RSRQ
 # TYPE huawei_metrics_rsrq_db gauge
-huawei_metrics_rsrq_db -10
+huawei_metrics_rsrq_db -12
 # HELP huawei_metrics_rssi_dbm RSSI
 # TYPE huawei_metrics_rssi_dbm gauge
 huawei_metrics_rssi_dbm -81
 # HELP huawei_metrics_sinr_db SINR
 # TYPE huawei_metrics_sinr_db gauge
-huawei_metrics_sinr_db 2
+huawei_metrics_sinr_db 0
+# HELP huawei_metrics_total_devices Number of total devices
+# TYPE huawei_metrics_total_devices gauge
+huawei_metrics_total_devices 41
 # HELP huawei_metrics_totaldownload_mb Total download traffic
 # TYPE huawei_metrics_totaldownload_mb counter
-huawei_metrics_totaldownload_mb 3777746.68
+huawei_metrics_totaldownload_mb 3815048.07
 # HELP huawei_metrics_totalupload_mb Total upload traffic
 # TYPE huawei_metrics_totalupload_mb counter
-huawei_metrics_totalupload_mb 183395.66
+huawei_metrics_totalupload_mb 185810.79
+# HELP huawei_metrics_wifi_2ghz_devices Number of 2.4 GHz wifi devices
+# TYPE huawei_metrics_wifi_2ghz_devices gauge
+huawei_metrics_wifi_2ghz_devices 1
+# HELP huawei_metrics_wifi_5ghz_devices Number of 5 GHz wifi devices
+# TYPE huawei_metrics_wifi_5ghz_devices gauge
+huawei_metrics_wifi_5ghz_devices 7
+# HELP huawei_metrics_wifi_devices Number of wifi devices
+# TYPE huawei_metrics_wifi_devices gauge
+huawei_metrics_wifi_devices 8
 ```
 
 ## Installation
