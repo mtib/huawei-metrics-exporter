@@ -10,7 +10,10 @@ use std::{
 use clap::{App, Arg};
 use dotenv::dotenv;
 use fantoccini::{elements::Element, ClientBuilder, Locator};
-use prometheus::{Counter, Encoder, Gauge, IntGauge, Opts, Registry, TextEncoder};
+use prometheus::{
+    Counter, CounterVec, Encoder, Gauge, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
+    TextEncoder,
+};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, to_value, Map, Value};
@@ -262,6 +265,24 @@ async fn main() {
             gauge.set(num);
             r.register(Box::new(gauge)).unwrap();
         }
+
+        let device_vec = IntCounterVec::new(
+            new_opt("device_uptime_min", "Devices"),
+            &["connection", "mac", "friendly_name"],
+        )
+        .unwrap();
+        for dev in devices.online.iter() {
+            device_vec
+                .with_label_values(&["online", &dev.mac, dev.name.as_ref().unwrap_or(&dev.mac)])
+                .inc_by(dev.uptime.as_ref().map_or(0, |u| u.minutes));
+        }
+
+        for dev in devices.offline.iter() {
+            device_vec
+                .with_label_values(&["offline", &dev.mac, dev.name.as_ref().unwrap_or(&dev.mac)])
+                .inc_by(0);
+        }
+        r.register(Box::new(device_vec)).unwrap();
 
         for (label, value) in &info {
             if let Some(Parsed {
